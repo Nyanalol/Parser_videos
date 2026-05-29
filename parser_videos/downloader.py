@@ -10,6 +10,7 @@ descargó antes no se vuelve a descargar (caché de audio).
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
@@ -17,7 +18,7 @@ from typing import Callable, Optional
 from yt_dlp import YoutubeDL
 
 from . import config
-from .ffmpeg_utils import get_ffmpeg_dir
+from .ffmpeg_utils import get_ffmpeg_exe
 
 # Bitrate de audio del MP3 resultante. 64 kbps mono es más que suficiente para
 # voz y mantiene los archivos pequeños (~28 MB por hora).
@@ -89,34 +90,53 @@ def download_audio(
             if pct:
                 _log(f"Descargando audio... {pct}")
         elif d.get("status") == "finished":
-            _log("Descarga completada, extrayendo audio...")
+            _log("Descarga completada, convirtiendo a MP3...")
 
+    # Descargamos la mejor pista de audio SIN postprocesar. No usamos el
+    # postprocesador de yt-dlp porque requiere ffprobe (que imageio-ffmpeg no
+    # incluye); la conversión a MP3 la hacemos nosotros con ffmpeg.
     ydl_opts = {
         "format": "bestaudio/best",
-        "outtmpl": str(config.DOWNLOADS_DIR / "%(id)s.%(ext)s"),
-        "ffmpeg_location": get_ffmpeg_dir(),
+        "outtmpl": str(config.DOWNLOADS_DIR / "%(id)s.source.%(ext)s"),
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
         "progress_hooks": [_hook],
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": _AUDIO_BITRATE,
-            }
-        ],
-        # Audio mono: reduce a la mitad el tamaño sin afectar a la transcripción.
-        "postprocessor_args": {"FFmpegExtractAudio": ["-ac", "1"]},
     }
 
     with YoutubeDL(ydl_opts) as ydl:
-        ydl.extract_info(url, download=True)
+        result = ydl.extract_info(url, download=True)
 
-    if not audio_path.exists():
-        raise FileNotFoundError(
-            f"No se generó el archivo de audio esperado: {audio_path}"
-        )
+    # Ruta real del archivo descargado.
+    source_path: Optional[Path] = None
+    downloads = result.get("requested_downloads") if isinstance(result, dict) else None
+    if downloads:
+        fp = downloads[0].get("filepath")
+        if fp:
+            source_path = Path(fp)
+    if source_path is None or not source_path.exists():
+        # Respaldo: buscar por patrón {id}.source.*
+        matches = list(config.DOWNLOADS_DIR.glob(f"{info.video_id}.source.*"))
+        source_path = matches[0] if matches else None
+    if source_path is None or not source_path.exists():
+        raise FileNotFoundError("No se encontró el audio descargado por yt-dlp.")
+
+    # Convertir a MP3 mono 64 kbps con nuestro ffmpeg.
+    ffmpeg = get_ffmpeg_exe()
+    cmd = [
+        ffmpeg, "-y", "-i", str(source_path),
+        "-vn", "-ac", "1", "-b:a", f"{_AUDIO_BITRATE}k",
+        str(audio_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0 or not audio_path.exists():
+        raise RuntimeError(f"Fallo al convertir el audio con ffmpeg:\n{proc.stderr[-500:]}")
+
+    # Limpiar el archivo fuente original.
+    try:
+        source_path.unlink()
+    except OSError:
+        pass
 
     _log("Audio listo.")
     return DownloadResult(audio_path=audio_path, info=info)
