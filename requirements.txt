@@ -1,0 +1,14 @@
+# Descarga de video/audio desde YouTube y otras webs
+yt-dlp>=2024.1.0
+
+# Cliente oficial de OpenAI (Whisper para transcribir, GPT para resumir)
+openai>=1.30.0
+
+# Interfaz grafica de escritorio
+customtkinter>=5.2.0
+
+# Carga de variables de entorno (.env)
+python-dotenv>=1.0.0
+
+# Binario de ffmpeg embebido (no requiere instalar ffmpeg en el sistema)
+imageio-ffmpeg>=0.4.9
