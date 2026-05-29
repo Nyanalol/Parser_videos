@@ -92,6 +92,29 @@ def parse_ranges(text: str) -> list[TimeRange]:
     return ranges
 
 
+def filter_segments(segments: list[dict], ranges: list["TimeRange"]) -> list[dict]:
+    """Devuelve los segmentos que caen dentro de alguno de los rangos.
+
+    Un segmento se incluye si su punto medio está dentro de algún rango. Si
+    `ranges` está vacío se devuelven todos (vídeo completo).
+    """
+    if not ranges:
+        return segments
+    seleccionados: list[dict] = []
+    for seg in segments:
+        mid = (float(seg.get("start", 0)) + float(seg.get("end", 0))) / 2
+        if any(r.start <= mid <= r.end for r in ranges):
+            seleccionados.append(seg)
+    return seleccionados
+
+
+def ranges_label(ranges: list["TimeRange"]) -> str:
+    """Etiqueta legible de los rangos, o 'vídeo completo' si no hay."""
+    if not ranges:
+        return "vídeo completo"
+    return ", ".join(r.label for r in ranges)
+
+
 def extract_ranges(
     audio_path: Path,
     ranges: list[TimeRange],

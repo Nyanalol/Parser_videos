@@ -3,11 +3,13 @@
 Extrae solo la pista de audio y la convierte a MP3 mono a bitrate moderado
 para que los archivos sean pequeños (importante por el límite de 25 MB de
 Whisper) sin perder inteligibilidad del habla.
+
+El audio se guarda con el id del vídeo como nombre, de modo que si ya se
+descargó antes no se vuelve a descargar (caché de audio).
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
@@ -25,35 +27,61 @@ ProgressCallback = Callable[[str], None]
 
 
 @dataclass
-class DownloadResult:
-    """Resultado de una descarga de audio."""
+class VideoInfo:
+    """Metadatos de un vídeo (sin descargar nada)."""
 
-    audio_path: Path
+    video_id: str
     title: str
     duration_seconds: Optional[float]
     webpage_url: str
 
 
-def _sanitize(name: str) -> str:
-    """Limpia un texto para usarlo como nombre de archivo en Windows."""
-    name = re.sub(r'[<>:"/\\|?*]', "_", name)
-    name = name.strip().strip(".")
-    return name[:120] or "video"
+@dataclass
+class DownloadResult:
+    """Resultado de una descarga de audio."""
+
+    audio_path: Path
+    info: VideoInfo
+
+
+def probe(url: str) -> VideoInfo:
+    """Obtiene los metadatos del vídeo sin descargar el audio."""
+    opts = {"quiet": True, "no_warnings": True, "noplaylist": True, "skip_download": True}
+    with YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    video_id = info["id"]
+    return VideoInfo(
+        video_id=video_id,
+        title=info.get("title") or video_id,
+        duration_seconds=info.get("duration"),
+        webpage_url=info.get("webpage_url") or url,
+    )
 
 
 def download_audio(
     url: str,
+    info: Optional[VideoInfo] = None,
     on_progress: Optional[ProgressCallback] = None,
 ) -> DownloadResult:
     """Descarga y extrae el audio del vídeo indicado por `url`.
 
-    Devuelve un DownloadResult con la ruta del MP3 y metadatos básicos.
+    Si ya existe el MP3 para ese id, lo reutiliza sin volver a descargar.
+    Puede recibir un `info` ya obtenido con probe() para evitar una consulta extra.
     """
     config.ensure_dirs()
 
     def _log(msg: str) -> None:
         if on_progress:
             on_progress(msg)
+
+    if info is None:
+        _log("Obteniendo información del vídeo...")
+        info = probe(url)
+
+    audio_path = config.DOWNLOADS_DIR / f"{info.video_id}.mp3"
+    if audio_path.exists() and audio_path.stat().st_size > 0:
+        _log("Audio ya descargado anteriormente; se reutiliza.")
+        return DownloadResult(audio_path=audio_path, info=info)
 
     def _hook(d: dict) -> None:
         if d.get("status") == "downloading":
@@ -63,13 +91,9 @@ def download_audio(
         elif d.get("status") == "finished":
             _log("Descarga completada, extrayendo audio...")
 
-    # Plantilla de salida: usamos el id del vídeo para evitar colisiones; luego
-    # renombramos a un nombre legible basado en el título.
-    outtmpl = str(config.DOWNLOADS_DIR / "%(id)s.%(ext)s")
-
     ydl_opts = {
         "format": "bestaudio/best",
-        "outtmpl": outtmpl,
+        "outtmpl": str(config.DOWNLOADS_DIR / "%(id)s.%(ext)s"),
         "ffmpeg_location": get_ffmpeg_dir(),
         "noplaylist": True,
         "quiet": True,
@@ -86,32 +110,13 @@ def download_audio(
         "postprocessor_args": {"FFmpegExtractAudio": ["-ac", "1"]},
     }
 
-    _log("Obteniendo información del vídeo...")
     with YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+        ydl.extract_info(url, download=True)
 
-    video_id = info["id"]
-    title = info.get("title") or video_id
-    duration = info.get("duration")
-    webpage_url = info.get("webpage_url") or url
-
-    produced = config.DOWNLOADS_DIR / f"{video_id}.mp3"
-    if not produced.exists():
+    if not audio_path.exists():
         raise FileNotFoundError(
-            f"No se generó el archivo de audio esperado: {produced}"
+            f"No se generó el archivo de audio esperado: {audio_path}"
         )
 
-    # Renombrar a un nombre legible.
-    target = config.DOWNLOADS_DIR / f"{_sanitize(title)}.mp3"
-    if target != produced:
-        if target.exists():
-            target.unlink()
-        produced.rename(target)
-
     _log("Audio listo.")
-    return DownloadResult(
-        audio_path=target,
-        title=title,
-        duration_seconds=duration,
-        webpage_url=webpage_url,
-    )
+    return DownloadResult(audio_path=audio_path, info=info)
