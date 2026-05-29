@@ -41,8 +41,29 @@ copy .env.example .env
 python -m parser_videos
 ```
 
-Se abre la ventana de la aplicación: pega la URL del vídeo, elige el idioma del
-resumen y pulsa **Procesar**. El resultado se guarda en la carpeta `output/`.
+Se abre la ventana de la aplicación:
+
+1. Añade una o varias URLs (botón **＋ Añadir vídeo**). Si pones varias, sus
+   contenidos se **combinan en un único resumen**.
+2. Opcional: en cada vídeo, indica **rangos de tiempo** para procesar solo
+   ciertos fragmentos, p.ej. `14:34-16:34, 20:00-21:30`. Vacío = vídeo completo.
+3. Elige el **idioma del resumen** y, si quieres, el idioma del audio.
+4. Escribe **instrucciones para el resumen** (tono, enfoque, formato...). Si lo
+   dejas vacío se usa un prompt por defecto.
+5. Pulsa **Procesar**.
+
+El resultado se guarda en `output/`:
+- `Título.md` — el resumen.
+- `Título.transcripcion.txt` — la transcripción usada.
+
+### Funciones destacadas
+
+- **Caché**: cada vídeo se transcribe una sola vez. Si lo vuelves a usar (aunque
+  cambies los rangos o el prompt), se reutiliza la transcripción guardada en
+  `.cache/` y no se consume Whisper de nuevo.
+- **Rangos por segmentos**: como se guardan las marcas de tiempo, cambiar los
+  rangos es instantáneo y gratis.
+- **Sin ffmpeg manual**: se usa el binario embebido de `imageio-ffmpeg`.
 
 ## Estructura del proyecto
 
@@ -50,15 +71,31 @@ resumen y pulsa **Procesar**. El resultado se guarda en la carpeta `output/`.
 parser_videos/
 ├── __init__.py
 ├── __main__.py        # Punto de entrada (lanza la GUI)
-├── config.py          # Configuración y carga de .env
+├── config.py          # Configuración, rutas y carga de .env
 ├── ffmpeg_utils.py    # Localiza el binario de ffmpeg embebido
-├── downloader.py      # Descarga de audio con yt-dlp
-├── transcriber.py     # Transcripción con Whisper (+ troceo de archivos grandes)
+├── downloader.py      # probe() + descarga de audio con yt-dlp (cacheado por id)
+├── transcriber.py     # Transcripción con Whisper en segmentos (+ troceo >25MB)
+├── timeranges.py      # Parseo de rangos y filtrado de segmentos por tiempo
+├── cache.py           # Caché en disco de transcripciones completas
 ├── summarizer.py      # Resumen con GPT y generación del .md
-├── pipeline.py        # Orquesta descarga -> transcripción -> resumen
+├── pipeline.py        # Orquesta todo (mono y multi-vídeo)
 └── gui.py             # Interfaz CustomTkinter
 ```
 
+## Empaquetado a .exe (opcional)
+
+Para distribuir un ejecutable de Windows:
+
+```powershell
+pip install pyinstaller
+pyinstaller --noconfirm --windowed --name ParserVideos `
+  --collect-all customtkinter `
+  --collect-all imageio_ffmpeg `
+  -m parser_videos
+```
+
+El ejecutable queda en `dist/ParserVideos/`. Coloca tu `.env` junto al `.exe`.
+
 ## Estado
 
-Proyecto en construcción por bloques de tareas. Ver historial de commits.
+Proyecto construido por bloques de tareas. Ver historial de commits.
