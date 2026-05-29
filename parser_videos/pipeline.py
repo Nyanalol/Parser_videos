@@ -8,12 +8,11 @@ Soporta:
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import cache, config, downloader, summarizer, timeranges, transcriber
+from . import cache, config, downloader, exporter, summarizer, timeranges, transcriber
 
 ProgressCallback = Callable[[str], None]
 
@@ -28,15 +27,13 @@ class VideoRequest:
 
 @dataclass
 class PipelineResult:
-    output_path: Path
+    md_path: Path
+    html_path: Path
+    obsidian_path: Path
+    transcript_path: Path
     markdown: str
     transcript: str
     titles: list[str] = field(default_factory=list)
-
-
-def _sanitize(name: str) -> str:
-    name = re.sub(r'[<>:"/\\|?*]', "_", name).strip().strip(".")
-    return name[:120] or "resumen"
 
 
 def _process_one(
@@ -128,12 +125,8 @@ def process(
             f"{t} [{r}]" for t, r in zip(titulos, etiquetas_rangos)
         )
 
-    # Guardar la transcripción combinada por si se quiere consultar.
-    transcript_path = config.OUTPUT_DIR / f"{_sanitize(titulo_doc)}.transcripcion.txt"
-    transcript_path.write_text(transcript, encoding="utf-8")
-
-    # Resumen.
-    summary = summarizer.summarize(
+    # Resumen (devuelve el Markdown).
+    markdown = summarizer.summarize(
         transcript=transcript,
         title=titulo_doc,
         source_url=fuente,
@@ -143,10 +136,17 @@ def process(
         on_progress=on_progress,
     )
 
+    # Exportar a las distintas carpetas/formatos.
+    _log("Exportando a Markdown, HTML y Obsidian...")
+    exp = exporter.export(titulo_doc, markdown, transcript)
+
     _log("¡Listo!")
     return PipelineResult(
-        output_path=summary.output_path,
-        markdown=summary.markdown,
+        md_path=exp.md_path,
+        html_path=exp.html_path,
+        obsidian_path=exp.obsidian_path,
+        transcript_path=exp.transcript_path,
+        markdown=markdown,
         transcript=transcript,
         titles=titulos,
     )

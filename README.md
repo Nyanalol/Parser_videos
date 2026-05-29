@@ -52,9 +52,12 @@ Se abre la ventana de la aplicación:
    dejas vacío se usa un prompt por defecto.
 5. Pulsa **Procesar**.
 
-El resultado se guarda en `output/`:
-- `Título.md` — el resumen.
-- `Título.transcripcion.txt` — la transcripción usada.
+El resultado se guarda en la carpeta `Transcripciones Videos` del escritorio,
+organizado en subcarpetas:
+- `Markdown/Título.md` — el resumen en Markdown.
+- `HTML/Título.html` — el resumen renderizado (doble clic = se abre en el navegador).
+- `Obsidian/Título.md` — copia para usar como vault de Obsidian.
+- `Transcripciones/Título.txt` — la transcripción usada.
 
 ### Funciones destacadas
 

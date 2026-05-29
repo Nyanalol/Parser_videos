@@ -40,8 +40,15 @@ def _desktop_dir() -> Path:
 # Carpetas de trabajo.
 DOWNLOADS_DIR = _PROJECT_ROOT / "downloads"
 CACHE_DIR = _PROJECT_ROOT / ".cache"
-# Los resúmenes se guardan en una carpeta del escritorio, fácil de encontrar.
+
+# Carpeta raíz de salida en el escritorio, con una subcarpeta por formato.
 OUTPUT_DIR = _desktop_dir() / "Transcripciones Videos"
+TRANSCRIPTS_DIR = OUTPUT_DIR / "Transcripciones"
+MD_DIR = OUTPUT_DIR / "Markdown"
+HTML_DIR = OUTPUT_DIR / "HTML"
+OBSIDIAN_DIR = OUTPUT_DIR / "Obsidian"  # vault de Obsidian (también .md)
+
+_OUTPUT_SUBDIRS = (TRANSCRIPTS_DIR, MD_DIR, HTML_DIR, OBSIDIAN_DIR)
 
 # Clave y modelos de OpenAI.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
@@ -57,8 +64,10 @@ CHUNK_TARGET_BYTES = 24 * 1024 * 1024
 def ensure_dirs() -> None:
     """Crea las carpetas de trabajo si no existen."""
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    for sub in _OUTPUT_SUBDIRS:
+        sub.mkdir(parents=True, exist_ok=True)
 
 
 def api_key_present() -> bool:

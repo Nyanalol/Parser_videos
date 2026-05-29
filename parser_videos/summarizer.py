@@ -7,9 +7,7 @@ estructurado.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Callable, Optional
 
 from openai import OpenAI
@@ -41,25 +39,10 @@ LANGUAGE_CHOICES = {
 }
 
 
-@dataclass
-class SummaryResult:
-    """Resultado del resumen."""
-
-    markdown: str
-    output_path: Path
-
-
 def _language_instruction(language_name: Optional[str]) -> str:
     if not language_name or language_name == "Mismo que el vídeo":
         return "Escribe el resumen en el mismo idioma que la transcripción."
     return f"Escribe el resumen en {language_name}."
-
-
-def _sanitize_filename(name: str) -> str:
-    import re
-
-    name = re.sub(r'[<>:"/\\|?*]', "_", name).strip().strip(".")
-    return name[:120] or "resumen"
 
 
 def summarize(
@@ -70,8 +53,8 @@ def summarize(
     summary_language: Optional[str] = None,
     ranges_label: str = "",
     on_progress: Optional[ProgressCallback] = None,
-) -> SummaryResult:
-    """Resume la transcripción y guarda el resultado en un archivo .md.
+) -> str:
+    """Resume la transcripción y devuelve el documento en Markdown.
 
     - `custom_prompt`: instrucciones del usuario; si está vacío se usa el por defecto.
     - `summary_language`: nombre del idioma (clave de LANGUAGE_CHOICES) o None.
@@ -114,12 +97,4 @@ def summarize(
     if ranges_label:
         cabecera.append(f"- **Fragmentos procesados:** {ranges_label}")
     cabecera += ["", "---", ""]
-    markdown = "\n".join(cabecera) + cuerpo + "\n"
-
-    # Guardar en output/.
-    nombre = _sanitize_filename(title)
-    output_path = config.OUTPUT_DIR / f"{nombre}.md"
-    output_path.write_text(markdown, encoding="utf-8")
-    _log(f"Resumen guardado en {output_path.name}")
-
-    return SummaryResult(markdown=markdown, output_path=output_path)
+    return "\n".join(cabecera) + cuerpo + "\n"

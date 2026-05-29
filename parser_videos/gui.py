@@ -151,15 +151,23 @@ class App(ctk.CTk):
         self.result_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.result_frame.grid(row=9, column=0, padx=16, pady=(0, 16), sticky="ew")
         self.open_md_btn = ctk.CTkButton(
-            self.result_frame, text="Abrir resumen (.md)", state="disabled", command=self.open_md
+            self.result_frame, text="Abrir .md", state="disabled", command=self.open_md
         )
         self.open_md_btn.pack(side="left", padx=(0, 8))
+        self.open_html_btn = ctk.CTkButton(
+            self.result_frame, text="Abrir HTML", state="disabled", command=self.open_html
+        )
+        self.open_html_btn.pack(side="left", padx=(0, 8))
+        self.open_obsidian_btn = ctk.CTkButton(
+            self.result_frame, text="Abrir en Obsidian", state="disabled", command=self.open_obsidian
+        )
+        self.open_obsidian_btn.pack(side="left", padx=(0, 8))
         self.open_dir_btn = ctk.CTkButton(
             self.result_frame, text="Abrir carpeta", state="disabled", command=self.open_dir
         )
         self.open_dir_btn.pack(side="left")
 
-        self._last_output: Optional[Path] = None
+        self._result = None  # PipelineResult tras procesar
 
         self.add_row()
         if not config.api_key_present():
@@ -204,8 +212,8 @@ class App(ctk.CTk):
         audio_language = _AUDIO_LANGS.get(self.audio_lang.get())
 
         self.process_btn.configure(state="disabled", text="Procesando...")
-        self.open_md_btn.configure(state="disabled")
-        self.open_dir_btn.configure(state="disabled")
+        for btn in (self.open_md_btn, self.open_html_btn, self.open_obsidian_btn, self.open_dir_btn):
+            btn.configure(state="disabled")
 
         thread = threading.Thread(
             target=self._run,
@@ -223,8 +231,11 @@ class App(ctk.CTk):
                 transcribe_language=audio_language,
                 on_progress=self.log,
             )
-            self._last_output = result.output_path
-            self.log(f"✔ Resumen guardado en: {result.output_path}")
+            self._result = result
+            self.log(f"✔ Markdown: {result.md_path}")
+            self.log(f"✔ HTML:     {result.html_path}")
+            self.log(f"✔ Obsidian: {result.obsidian_path}")
+            self.log(f"✔ Transcripción: {result.transcript_path}")
             self.after(0, self._enable_result_buttons)
         except Exception as exc:  # noqa: BLE001 - mostramos cualquier fallo al usuario
             self.log(f"✖ Error: {exc}")
@@ -232,15 +243,37 @@ class App(ctk.CTk):
             self.after(0, lambda: self.process_btn.configure(state="normal", text="Procesar"))
 
     def _enable_result_buttons(self):
-        self.open_md_btn.configure(state="normal")
-        self.open_dir_btn.configure(state="normal")
+        for btn in (self.open_md_btn, self.open_html_btn, self.open_obsidian_btn, self.open_dir_btn):
+            btn.configure(state="normal")
+
+    @staticmethod
+    def _open(path: Path):
+        if path and Path(path).exists():
+            os.startfile(path)  # type: ignore[attr-defined]
 
     def open_md(self):
-        if self._last_output and self._last_output.exists():
-            os.startfile(self._last_output)  # type: ignore[attr-defined]
+        if self._result:
+            self._open(self._result.md_path)
+
+    def open_html(self):
+        if self._result:
+            self._open(self._result.html_path)
+
+    def open_obsidian(self):
+        """Abre la nota en Obsidian mediante su URI; si falla, abre la carpeta."""
+        if not self._result:
+            return
+        import urllib.parse
+
+        path = str(self._result.obsidian_path)
+        uri = "obsidian://open?path=" + urllib.parse.quote(path, safe="")
+        try:
+            os.startfile(uri)  # type: ignore[attr-defined]
+        except Exception:
+            self._open(config.OBSIDIAN_DIR)
 
     def open_dir(self):
-        os.startfile(config.OUTPUT_DIR)  # type: ignore[attr-defined]
+        self._open(config.OUTPUT_DIR)
 
 
 def run():
