@@ -18,6 +18,7 @@ load_dotenv(_PROJECT_ROOT / ".env")
 # Carpetas de trabajo.
 DOWNLOADS_DIR = _PROJECT_ROOT / "downloads"
 OUTPUT_DIR = _PROJECT_ROOT / "output"
+CACHE_DIR = _PROJECT_ROOT / ".cache"
 
 # Clave y modelos de OpenAI.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
@@ -34,6 +35,7 @@ def ensure_dirs() -> None:
     """Crea las carpetas de trabajo si no existen."""
     DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def api_key_present() -> bool:
