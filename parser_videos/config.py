@@ -15,10 +15,33 @@ from dotenv import load_dotenv
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_PROJECT_ROOT / ".env")
 
+
+def _desktop_dir() -> Path:
+    """Localiza el escritorio del usuario (soporta redirección a OneDrive).
+
+    En Windows lo lee del registro; si falla, usa ~/Desktop.
+    """
+    try:
+        import winreg
+
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+        )
+        value, _ = winreg.QueryValueEx(key, "Desktop")
+        path = Path(os.path.expandvars(value))
+        if path.exists():
+            return path
+    except Exception:
+        pass
+    return Path.home() / "Desktop"
+
+
 # Carpetas de trabajo.
 DOWNLOADS_DIR = _PROJECT_ROOT / "downloads"
-OUTPUT_DIR = _PROJECT_ROOT / "output"
 CACHE_DIR = _PROJECT_ROOT / ".cache"
+# Los resúmenes se guardan en una carpeta del escritorio, fácil de encontrar.
+OUTPUT_DIR = _desktop_dir() / "Transcripciones Videos"
 
 # Clave y modelos de OpenAI.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
