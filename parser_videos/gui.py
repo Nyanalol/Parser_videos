@@ -23,6 +23,25 @@ ctk.set_default_color_theme("blue")
 # Idiomas para la transcripción del audio (forzar idioma o autodetección).
 _AUDIO_LANGS = {"Detección automática": None, "Español": "es", "Inglés": "en"}
 
+# Icono de la aplicación.
+_ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "icon.ico"
+
+
+def _set_app_identity() -> None:
+    """Declara una identidad propia en Windows (AppUserModelID).
+
+    Sin esto, la barra de tareas agrupa la ventana de pythonw.exe bajo la
+    identidad cacheada de otra app de Python y puede mostrar un icono ajeno.
+    """
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "Nyana.ParserVideos"
+        )
+    except Exception:
+        pass
+
 
 class VideoRow(ctk.CTkFrame):
     """Una fila con la URL de un vídeo y sus rangos de tiempo opcionales."""
@@ -59,9 +78,19 @@ class App(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Parser Videos — transcribe y resume")
-        self.geometry("820x760")
+        self.geometry("820x780")
+        self.minsize(720, 640)
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(6, weight=1)
+        # La lista de vídeos es la zona que absorbe el espacio sobrante, de modo
+        # que los campos de abajo (prompt, log) mantienen siempre su altura.
+        self.grid_rowconfigure(2, weight=1)
+
+        # Icono de la ventana (título y barra de tareas).
+        if _ICON_PATH.exists():
+            try:
+                self.iconbitmap(str(_ICON_PATH))
+            except Exception:
+                pass
 
         self.rows: list[VideoRow] = []
 
@@ -75,9 +104,9 @@ class App(ctk.CTk):
             text_color="gray",
         ).grid(row=1, column=0, padx=16, pady=(0, 8), sticky="w")
 
-        # --- Lista de vídeos ---
-        self.videos_frame = ctk.CTkScrollableFrame(self, label_text="Vídeos", height=160)
-        self.videos_frame.grid(row=2, column=0, padx=16, pady=6, sticky="ew")
+        # --- Lista de vídeos (zona elástica) ---
+        self.videos_frame = ctk.CTkScrollableFrame(self, label_text="Vídeos", height=120)
+        self.videos_frame.grid(row=2, column=0, padx=16, pady=6, sticky="nsew")
         self.videos_frame.grid_columnconfigure(0, weight=1)
 
         add_btn = ctk.CTkButton(self, text="＋ Añadir vídeo", command=self.add_row)
@@ -102,8 +131,8 @@ class App(ctk.CTk):
         ctk.CTkLabel(self, text="Instrucciones para el resumen (tono, enfoque...). Vacío = por defecto:").grid(
             row=5, column=0, padx=16, pady=(8, 0), sticky="w"
         )
-        self.prompt_box = ctk.CTkTextbox(self, height=90)
-        self.prompt_box.grid(row=6, column=0, padx=16, pady=6, sticky="nsew")
+        self.prompt_box = ctk.CTkTextbox(self, height=110)
+        self.prompt_box.grid(row=6, column=0, padx=16, pady=6, sticky="ew")
         self.prompt_box.insert("1.0", summarizer.DEFAULT_PROMPT)
 
         # --- Botón procesar ---
@@ -215,6 +244,7 @@ class App(ctk.CTk):
 
 
 def run():
+    _set_app_identity()
     App().mainloop()
 
 
