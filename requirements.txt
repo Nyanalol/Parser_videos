@@ -15,3 +15,6 @@ imageio-ffmpeg>=0.4.9
 
 # Conversión de Markdown a HTML para la exportación
 markdown>=3.5
+
+# Tests (desarrollo)
+pytest>=8.0
