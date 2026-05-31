@@ -127,6 +127,11 @@ class App(ctk.CTk):
         self.audio_lang.set("Detección automática")
         self.audio_lang.grid(row=0, column=3, padx=8, pady=8, sticky="w")
 
+        ctk.CTkLabel(opts, text="Extensión del resumen:").grid(row=1, column=0, padx=8, pady=8, sticky="w")
+        self.length_level = ctk.CTkOptionMenu(opts, values=list(summarizer.LENGTH_CHOICES.keys()))
+        self.length_level.set(summarizer.DEFAULT_LENGTH)
+        self.length_level.grid(row=1, column=1, padx=8, pady=8, sticky="w")
+
         # --- Prompt personalizado ---
         ctk.CTkLabel(self, text="Instrucciones para el resumen (tono, enfoque...). Vacío = por defecto:").grid(
             row=5, column=0, padx=16, pady=(8, 0), sticky="w"
@@ -210,6 +215,7 @@ class App(ctk.CTk):
         custom_prompt = self.prompt_box.get("1.0", "end").strip()
         summary_language = self.summary_lang.get()
         audio_language = _AUDIO_LANGS.get(self.audio_lang.get())
+        length_level = self.length_level.get()
 
         self.process_btn.configure(state="disabled", text="Procesando...")
         for btn in (self.open_md_btn, self.open_html_btn, self.open_obsidian_btn, self.open_dir_btn):
@@ -217,17 +223,18 @@ class App(ctk.CTk):
 
         thread = threading.Thread(
             target=self._run,
-            args=(requests, custom_prompt, summary_language, audio_language),
+            args=(requests, custom_prompt, summary_language, audio_language, length_level),
             daemon=True,
         )
         thread.start()
 
-    def _run(self, requests, custom_prompt, summary_language, audio_language):
+    def _run(self, requests, custom_prompt, summary_language, audio_language, length_level):
         try:
             result = process(
                 requests=requests,
                 custom_prompt=custom_prompt,
                 summary_language=summary_language,
+                length_level=length_level,
                 transcribe_language=audio_language,
                 on_progress=self.log,
             )

@@ -38,6 +38,44 @@ LANGUAGE_CHOICES = {
     "Mismo que el vídeo": None,
 }
 
+# Niveles de extensión del resumen. Cada uno da una instrucción concreta (los
+# modelos solo respetan la longitud si se les da una referencia explícita) y un
+# tope de tokens acorde. La clave es lo que se muestra en la GUI.
+LENGTH_CHOICES = {
+    "Muy breve": {
+        "instruction": (
+            "Resume en muy pocas líneas: un párrafo de 2-3 frases con la idea "
+            "principal y, como mucho, 3-5 puntos clave muy concisos. Sé telegráfico."
+        ),
+        "max_tokens": 400,
+    },
+    "Equilibrado": {
+        "instruction": (
+            "Resumen de extensión media (aprox. 250-400 palabras): breve "
+            "introducción, los puntos clave en una lista y conclusiones si procede."
+        ),
+        "max_tokens": 900,
+    },
+    "Extenso": {
+        "instruction": (
+            "Resumen detallado (aprox. 600-900 palabras) organizado en secciones "
+            "con encabezados, desarrollando cada punto importante con sus matices "
+            "y ejemplos mencionados en el vídeo."
+        ),
+        "max_tokens": 2000,
+    },
+    "Exhaustivo": {
+        "instruction": (
+            "Resumen muy completo y minucioso, organizado en secciones con "
+            "encabezados y sublistas. Cubre TODOS los temas, argumentos, datos y "
+            "ejemplos relevantes de la transcripción, sin dejarte nada importante. "
+            "No te limites artificialmente en longitud."
+        ),
+        "max_tokens": 4000,
+    },
+}
+DEFAULT_LENGTH = "Equilibrado"
+
 
 def _language_instruction(language_name: Optional[str]) -> str:
     if not language_name or language_name == "Mismo que el vídeo":
@@ -51,6 +89,7 @@ def summarize(
     source_url: str,
     custom_prompt: str = "",
     summary_language: Optional[str] = None,
+    length_level: str = DEFAULT_LENGTH,
     ranges_label: str = "",
     on_progress: Optional[ProgressCallback] = None,
 ) -> str:
@@ -58,6 +97,7 @@ def summarize(
 
     - `custom_prompt`: instrucciones del usuario; si está vacío se usa el por defecto.
     - `summary_language`: nombre del idioma (clave de LANGUAGE_CHOICES) o None.
+    - `length_level`: extensión deseada (clave de LENGTH_CHOICES).
     - `ranges_label`: descripción de los fragmentos procesados (para la cabecera).
     """
     if not config.api_key_present():
@@ -69,9 +109,11 @@ def summarize(
 
     config.ensure_dirs()
     instrucciones = (custom_prompt or "").strip() or DEFAULT_PROMPT
+    length = LENGTH_CHOICES.get(length_level, LENGTH_CHOICES[DEFAULT_LENGTH])
 
     user_msg = (
         f"{instrucciones}\n\n"
+        f"EXTENSIÓN REQUERIDA: {length['instruction']}\n\n"
         f"{_language_instruction(summary_language)}\n\n"
         f"Título del vídeo: {title}\n"
         "--- TRANSCRIPCIÓN ---\n"
@@ -88,6 +130,7 @@ def summarize(
             {"role": "user", "content": user_msg},
         ],
         temperature=0.3,
+        max_tokens=length["max_tokens"],
     )
     cuerpo = response.choices[0].message.content.strip()
 

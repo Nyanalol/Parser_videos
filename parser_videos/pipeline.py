@@ -82,6 +82,7 @@ def process(
     requests: list[VideoRequest],
     custom_prompt: str = "",
     summary_language: Optional[str] = None,
+    length_level: str = summarizer.DEFAULT_LENGTH,
     transcribe_language: Optional[str] = None,
     on_progress: Optional[ProgressCallback] = None,
 ) -> PipelineResult:
@@ -132,6 +133,7 @@ def process(
         source_url=fuente,
         custom_prompt=custom_prompt,
         summary_language=summary_language,
+        length_level=length_level,
         ranges_label=ranges_label,
         on_progress=on_progress,
     )
