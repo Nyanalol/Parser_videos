@@ -14,7 +14,7 @@ from typing import Optional
 
 import customtkinter as ctk
 
-from . import config, maintenance, settings, summarizer
+from . import cache, config, maintenance, settings, summarizer
 from .pipeline import VideoRequest, process
 
 ctk.set_appearance_mode("System")
@@ -114,9 +114,13 @@ class App(ctk.CTk):
         botones_top.grid(row=3, column=0, padx=16, pady=(0, 8), sticky="ew")
         ctk.CTkButton(botones_top, text="＋ Añadir vídeo", command=self.add_row).pack(side="left")
         ctk.CTkButton(
+            botones_top, text="📚 Historial", fg_color="gray30",
+            hover_color="gray25", command=self.open_history,
+        ).pack(side="left", padx=8)
+        ctk.CTkButton(
             botones_top, text="🧹 Limpiar descargas", fg_color="gray30",
             hover_color="gray25", command=self.clean_downloads,
-        ).pack(side="left", padx=8)
+        ).pack(side="left")
 
         # --- Opciones ---
         opts = ctk.CTkFrame(self)
@@ -315,6 +319,60 @@ class App(ctk.CTk):
     def clean_downloads(self):
         n, mb = maintenance.clean_downloads()
         self.log(f"🧹 Descargas limpiadas: {n} archivos, {mb:.1f} MB liberados.")
+
+    # ----- Historial / biblioteca -----
+    def open_history(self):
+        """Ventana con los vídeos ya transcritos (caché). Reutilizables sin coste."""
+        items = cache.list_cached()
+        win = ctk.CTkToplevel(self)
+        win.title("Historial de vídeos procesados")
+        win.geometry("700x460")
+        win.transient(self)
+        if _ICON_PATH.exists():
+            try:
+                win.after(250, lambda: win.iconbitmap(str(_ICON_PATH)))
+            except Exception:
+                pass
+
+        ctk.CTkLabel(
+            win, text=f"{len(items)} transcripciones en caché (reutilizables sin volver a transcribir):",
+            text_color="gray",
+        ).pack(padx=12, pady=(12, 4), anchor="w")
+
+        frame = ctk.CTkScrollableFrame(win)
+        frame.pack(fill="both", expand=True, padx=12, pady=8)
+        frame.grid_columnconfigure(0, weight=1)
+
+        if not items:
+            ctk.CTkLabel(frame, text="Aún no has procesado ningún vídeo.").grid(row=0, column=0, pady=20)
+
+        for i, it in enumerate(items):
+            fila = ctk.CTkFrame(frame)
+            fila.grid(row=i, column=0, sticky="ew", pady=2)
+            fila.grid_columnconfigure(0, weight=1)
+            etiqueta = "📝 subs" if it["source"] == "subtitles" else "🎙 whisper"
+            ctk.CTkLabel(
+                fila, text=f"{it['title']}  ({etiqueta})", anchor="w",
+            ).grid(row=0, column=0, padx=8, pady=6, sticky="ew")
+            url = it["url"]
+            ctk.CTkButton(
+                fila, text="Usar", width=70,
+                command=lambda u=url, w=win: self._use_from_history(u, w),
+            ).grid(row=0, column=1, padx=6)
+
+        ctk.CTkButton(win, text="Cerrar", command=win.destroy).pack(pady=(0, 12))
+
+    def _use_from_history(self, url: str, win):
+        """Rellena una fila con la URL elegida del historial y cierra la ventana."""
+        # Reutiliza la primera fila vacía o añade una nueva.
+        destino = next((r for r in self.rows if not r.url_entry.get().strip()), None)
+        if destino is None:
+            self.add_row()
+            destino = self.rows[-1]
+        destino.url_entry.delete(0, "end")
+        destino.url_entry.insert(0, url)
+        win.destroy()
+        self.log(f"Cargado del historial: {url} (se reutilizará la caché).")
 
 
 def run():
