@@ -8,6 +8,7 @@ proceso, mostrando el progreso en tiempo real.
 from __future__ import annotations
 
 import os
+import sys
 import threading
 from pathlib import Path
 from typing import Optional
@@ -23,8 +24,11 @@ ctk.set_default_color_theme("blue")
 # Idiomas para la transcripción del audio (forzar idioma o autodetección).
 _AUDIO_LANGS = {"Detección automática": None, "Español": "es", "Inglés": "en"}
 
-# Icono de la aplicación.
-_ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "icon.ico"
+# Icono de la aplicación (soporta ejecución empaquetada con PyInstaller).
+if getattr(sys, "frozen", False):
+    _ICON_PATH = Path(getattr(sys, "_MEIPASS", ".")) / "assets" / "icon.ico"
+else:
+    _ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "icon.ico"
 
 
 def _set_app_identity() -> None:

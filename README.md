@@ -85,16 +85,34 @@ parser_videos/
 └── gui.py             # Interfaz CustomTkinter
 ```
 
-## Empaquetado a .exe (opcional)
+## Funciones
 
-Para distribuir un ejecutable de Windows:
+- **Subtítulos de YouTube**: si el vídeo trae subtítulos, se usan en vez de
+  Whisper (gratis e instantáneo).
+- **Extensión del resumen**: muy breve → exhaustivo.
+- **Plantillas**: general, acta de reunión, tutorial, apuntes de estudio,
+  puntos accionables, receta.
+- **Modelo seleccionable**: `gpt-4o-mini` (barato) o `gpt-4o` (máxima calidad).
+- **Rangos de tiempo** por vídeo y **varios vídeos combinados** en un resumen.
+- **Playlists/canales**: se expanden automáticamente.
+- **Archivos locales**: además de URLs, acepta rutas de audio/vídeo del disco.
+- **Resumen jerárquico (map-reduce)** para transcripciones muy largas.
+- **Índice con marcas de tiempo clicables** (YouTube).
+- **Caché** de transcripciones e **historial** de vídeos procesados.
+- **Chat / Q&A** sobre el vídeo (RAG).
+- **Estimación de coste** por ejecución y **limpieza** de descargas.
+- Exporta a **Markdown, HTML y Obsidian**; recuerda tus últimas opciones.
+
+## Tests
 
 ```powershell
-pip install pyinstaller
-pyinstaller --noconfirm --windowed --name ParserVideos `
-  --collect-all customtkinter `
-  --collect-all imageio_ffmpeg `
-  -m parser_videos
+.\.venv\Scripts\python.exe -m pytest
+```
+
+## Empaquetado a .exe (opcional)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1
 ```
 
 El ejecutable queda en `dist/ParserVideos/`. Coloca tu `.env` junto al `.exe`.

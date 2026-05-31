@@ -7,12 +7,24 @@ los ajustes que usa el resto del programa.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Carga el .env situado en la raíz del proyecto (un nivel por encima del paquete).
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+def _project_root() -> Path:
+    """Raíz para datos (downloads, caché, .env, settings).
+
+    Empaquetado con PyInstaller usamos la carpeta del .exe; en desarrollo, la
+    raíz del repositorio (un nivel por encima del paquete).
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+_PROJECT_ROOT = _project_root()
 load_dotenv(_PROJECT_ROOT / ".env")
 
 
