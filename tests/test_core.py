@@ -41,9 +41,12 @@ def test_filter_segments_por_punto_medio():
         {"start": 10, "end": 20, "text": "b"},
         {"start": 20, "end": 30, "text": "c"},
     ]
-    out = timeranges.filter_segments(segs, timeranges.parse_ranges("0:08-0:16"))
-    textos = [s["text"] for s in out]
-    assert textos == ["a", "b"]
+    # Punto medio de "a"=5s, "b"=15s, "c"=25s; el rango 3-16 incluye a y b.
+    out = timeranges.filter_segments(segs, timeranges.parse_ranges("0:03-0:16"))
+    assert [s["text"] for s in out] == ["a", "b"]
+    # Un rango 8-16 solo cae sobre el punto medio de "b".
+    solo_b = timeranges.filter_segments(segs, timeranges.parse_ranges("0:08-0:16"))
+    assert [s["text"] for s in solo_b] == ["b"]
 
 
 def test_filter_segments_sin_rangos_devuelve_todo():
