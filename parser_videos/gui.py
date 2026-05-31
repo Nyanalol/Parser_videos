@@ -15,7 +15,7 @@ from typing import Optional
 import customtkinter as ctk
 
 from . import cache, config, maintenance, qa, settings, summarizer
-from .pipeline import VideoRequest, process
+from .pipeline import CancelledError, VideoRequest, process
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
@@ -172,12 +172,26 @@ class App(ctk.CTk):
         self.prompt_box.grid(row=6, column=0, padx=16, pady=6, sticky="ew")
         self.prompt_box.insert("1.0", self.prefs.get("custom_prompt", "") or summarizer.DEFAULT_PROMPT)
 
-        # --- Botón procesar ---
+        # --- Botón procesar + cancelar + barra de progreso ---
+        run_frame = ctk.CTkFrame(self, fg_color="transparent")
+        run_frame.grid(row=7, column=0, padx=16, pady=8, sticky="ew")
+        run_frame.grid_columnconfigure(0, weight=1)
         self.process_btn = ctk.CTkButton(
-            self, text="Procesar", height=40, font=ctk.CTkFont(size=15, weight="bold"),
+            run_frame, text="Procesar", height=40, font=ctk.CTkFont(size=15, weight="bold"),
             command=self.on_process,
         )
-        self.process_btn.grid(row=7, column=0, padx=16, pady=8, sticky="ew")
+        self.process_btn.grid(row=0, column=0, sticky="ew")
+        self.cancel_btn = ctk.CTkButton(
+            run_frame, text="Cancelar", height=40, width=110, fg_color="#a33",
+            hover_color="#822", command=self.on_cancel, state="disabled",
+        )
+        self.cancel_btn.grid(row=0, column=1, padx=(8, 0))
+        self.progress = ctk.CTkProgressBar(run_frame, mode="indeterminate")
+        self.progress.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self.progress.set(0)
+        self.progress.grid_remove()  # oculta hasta procesar
+
+        self._cancel = threading.Event()
 
         # --- Log de progreso ---
         self.log_box = ctk.CTkTextbox(self, height=150)
@@ -266,26 +280,46 @@ class App(ctk.CTk):
             "custom_prompt": custom_prompt,
         })
 
+        self._cancel.clear()
         self.process_btn.configure(state="disabled", text="Procesando...")
+        self.cancel_btn.configure(state="normal")
+        self.progress.grid()
+        self.progress.start()
         for btn in (self.open_md_btn, self.open_html_btn, self.open_obsidian_btn, self.open_dir_btn):
             btn.configure(state="disabled")
 
         thread = threading.Thread(target=self._run, args=(requests, opts), daemon=True)
         thread.start()
 
+    def on_cancel(self):
+        self._cancel.set()
+        self.cancel_btn.configure(state="disabled", text="Cancelando...")
+        self.log("Cancelando en cuanto termine el paso actual...")
+
     def _run(self, requests, opts):
         try:
-            result = process(requests=requests, on_progress=self.log, **opts)
+            result = process(
+                requests=requests, on_progress=self.log,
+                cancel_check=self._cancel.is_set, **opts,
+            )
             self._result = result
             self.log(f"✔ Markdown: {result.md_path}")
             self.log(f"✔ HTML:     {result.html_path}")
             self.log(f"✔ Obsidian: {result.obsidian_path}")
             self.log(f"✔ Transcripción: {result.transcript_path}")
             self.after(0, self._enable_result_buttons)
+        except CancelledError:
+            self.log("✖ Proceso cancelado.")
         except Exception as exc:  # noqa: BLE001 - mostramos cualquier fallo al usuario
             self.log(f"✖ Error: {exc}")
         finally:
-            self.after(0, lambda: self.process_btn.configure(state="normal", text="Procesar"))
+            self.after(0, self._reset_run_ui)
+
+    def _reset_run_ui(self):
+        self.process_btn.configure(state="normal", text="Procesar")
+        self.cancel_btn.configure(state="disabled", text="Cancelar")
+        self.progress.stop()
+        self.progress.grid_remove()
 
     def _enable_result_buttons(self):
         for btn in (self.open_md_btn, self.open_html_btn, self.open_obsidian_btn, self.open_dir_btn):

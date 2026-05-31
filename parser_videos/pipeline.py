@@ -29,6 +29,16 @@ from . import (
 from .usage import CostTracker
 
 ProgressCallback = Callable[[str], None]
+CancelCheck = Callable[[], bool]
+
+
+class CancelledError(Exception):
+    """Se lanza cuando el usuario cancela el proceso."""
+
+
+def _check_cancel(cancel_check: Optional[CancelCheck]) -> None:
+    if cancel_check and cancel_check():
+        raise CancelledError("Proceso cancelado por el usuario.")
 
 
 @dataclass
@@ -153,6 +163,7 @@ def process(
     use_subtitles: bool = True,
     add_timestamps: bool = True,
     on_progress: Optional[ProgressCallback] = None,
+    cancel_check: Optional[CancelCheck] = None,
 ) -> PipelineResult:
     """Procesa una o varias entradas y genera un único resumen en Markdown."""
     if not requests:
@@ -176,10 +187,12 @@ def process(
 
     procesados: list[_One] = []
     for i, req in enumerate(expandidas, start=1):
+        _check_cancel(cancel_check)
         _log(f"[{i}/{len(expandidas)}] Procesando...")
         procesados.append(
             _process_one(req, transcribe_language, use_subtitles, cost, on_progress)
         )
+    _check_cancel(cancel_check)
 
     multiple = len(procesados) > 1
     bloques = [
