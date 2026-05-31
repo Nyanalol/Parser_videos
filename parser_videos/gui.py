@@ -14,7 +14,7 @@ from typing import Optional
 
 import customtkinter as ctk
 
-from . import config, summarizer
+from . import config, maintenance, settings, summarizer
 from .pipeline import VideoRequest, process
 
 ctk.set_appearance_mode("System")
@@ -53,7 +53,7 @@ class VideoRow(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=3)
         self.grid_columnconfigure(1, weight=2)
 
-        self.url_entry = ctk.CTkEntry(self, placeholder_text="URL del vídeo (YouTube...)")
+        self.url_entry = ctk.CTkEntry(self, placeholder_text="URL (vídeo/playlist) o ruta de archivo local")
         self.url_entry.grid(row=0, column=0, padx=(0, 6), pady=4, sticky="ew")
 
         self.ranges_entry = ctk.CTkEntry(
@@ -93,6 +93,7 @@ class App(ctk.CTk):
                 pass
 
         self.rows: list[VideoRow] = []
+        self.prefs = settings.load()
 
         # --- Cabecera ---
         ctk.CTkLabel(
@@ -109,36 +110,59 @@ class App(ctk.CTk):
         self.videos_frame.grid(row=2, column=0, padx=16, pady=6, sticky="nsew")
         self.videos_frame.grid_columnconfigure(0, weight=1)
 
-        add_btn = ctk.CTkButton(self, text="＋ Añadir vídeo", command=self.add_row)
-        add_btn.grid(row=3, column=0, padx=16, pady=(0, 8), sticky="w")
+        botones_top = ctk.CTkFrame(self, fg_color="transparent")
+        botones_top.grid(row=3, column=0, padx=16, pady=(0, 8), sticky="ew")
+        ctk.CTkButton(botones_top, text="＋ Añadir vídeo", command=self.add_row).pack(side="left")
+        ctk.CTkButton(
+            botones_top, text="🧹 Limpiar descargas", fg_color="gray30",
+            hover_color="gray25", command=self.clean_downloads,
+        ).pack(side="left", padx=8)
 
         # --- Opciones ---
         opts = ctk.CTkFrame(self)
         opts.grid(row=4, column=0, padx=16, pady=6, sticky="ew")
         opts.grid_columnconfigure((1, 3), weight=1)
 
-        ctk.CTkLabel(opts, text="Idioma del resumen:").grid(row=0, column=0, padx=8, pady=8, sticky="w")
+        ctk.CTkLabel(opts, text="Idioma del resumen:").grid(row=0, column=0, padx=8, pady=6, sticky="w")
         self.summary_lang = ctk.CTkOptionMenu(opts, values=list(summarizer.LANGUAGE_CHOICES.keys()))
-        self.summary_lang.set("Español")
-        self.summary_lang.grid(row=0, column=1, padx=8, pady=8, sticky="w")
+        self.summary_lang.set(self.prefs.get("summary_language", "Español"))
+        self.summary_lang.grid(row=0, column=1, padx=8, pady=6, sticky="w")
 
-        ctk.CTkLabel(opts, text="Idioma del audio:").grid(row=0, column=2, padx=8, pady=8, sticky="w")
+        ctk.CTkLabel(opts, text="Idioma del audio:").grid(row=0, column=2, padx=8, pady=6, sticky="w")
         self.audio_lang = ctk.CTkOptionMenu(opts, values=list(_AUDIO_LANGS.keys()))
-        self.audio_lang.set("Detección automática")
-        self.audio_lang.grid(row=0, column=3, padx=8, pady=8, sticky="w")
+        self.audio_lang.set(self.prefs.get("audio_language", "Detección automática"))
+        self.audio_lang.grid(row=0, column=3, padx=8, pady=6, sticky="w")
 
-        ctk.CTkLabel(opts, text="Extensión del resumen:").grid(row=1, column=0, padx=8, pady=8, sticky="w")
+        ctk.CTkLabel(opts, text="Extensión:").grid(row=1, column=0, padx=8, pady=6, sticky="w")
         self.length_level = ctk.CTkOptionMenu(opts, values=list(summarizer.LENGTH_CHOICES.keys()))
-        self.length_level.set(summarizer.DEFAULT_LENGTH)
-        self.length_level.grid(row=1, column=1, padx=8, pady=8, sticky="w")
+        self.length_level.set(self.prefs.get("length_level", summarizer.DEFAULT_LENGTH))
+        self.length_level.grid(row=1, column=1, padx=8, pady=6, sticky="w")
+
+        ctk.CTkLabel(opts, text="Plantilla:").grid(row=1, column=2, padx=8, pady=6, sticky="w")
+        self.template = ctk.CTkOptionMenu(opts, values=list(summarizer.TEMPLATE_CHOICES.keys()))
+        self.template.set(self.prefs.get("template", summarizer.DEFAULT_TEMPLATE))
+        self.template.grid(row=1, column=3, padx=8, pady=6, sticky="w")
+
+        ctk.CTkLabel(opts, text="Modelo:").grid(row=2, column=0, padx=8, pady=6, sticky="w")
+        self.model = ctk.CTkOptionMenu(opts, values=summarizer.MODEL_CHOICES)
+        self.model.set(self.prefs.get("model", summarizer.MODEL_CHOICES[0]))
+        self.model.grid(row=2, column=1, padx=8, pady=6, sticky="w")
+
+        self.use_subs = ctk.CTkCheckBox(opts, text="Usar subtítulos si existen (gratis)")
+        self.use_subs.grid(row=2, column=2, columnspan=2, padx=8, pady=6, sticky="w")
+        self.use_subs.select()
+
+        self.add_ts = ctk.CTkCheckBox(opts, text="Añadir índice con marcas de tiempo")
+        self.add_ts.grid(row=3, column=2, columnspan=2, padx=8, pady=6, sticky="w")
+        self.add_ts.select()
 
         # --- Prompt personalizado ---
         ctk.CTkLabel(self, text="Instrucciones para el resumen (tono, enfoque...). Vacío = por defecto:").grid(
             row=5, column=0, padx=16, pady=(8, 0), sticky="w"
         )
-        self.prompt_box = ctk.CTkTextbox(self, height=110)
+        self.prompt_box = ctk.CTkTextbox(self, height=90)
         self.prompt_box.grid(row=6, column=0, padx=16, pady=6, sticky="ew")
-        self.prompt_box.insert("1.0", summarizer.DEFAULT_PROMPT)
+        self.prompt_box.insert("1.0", self.prefs.get("custom_prompt", "") or summarizer.DEFAULT_PROMPT)
 
         # --- Botón procesar ---
         self.process_btn = ctk.CTkButton(
@@ -213,31 +237,37 @@ class App(ctk.CTk):
             return
 
         custom_prompt = self.prompt_box.get("1.0", "end").strip()
-        summary_language = self.summary_lang.get()
-        audio_language = _AUDIO_LANGS.get(self.audio_lang.get())
-        length_level = self.length_level.get()
+        opts = dict(
+            custom_prompt=custom_prompt,
+            summary_language=self.summary_lang.get(),
+            length_level=self.length_level.get(),
+            template=self.template.get(),
+            model=self.model.get(),
+            transcribe_language=_AUDIO_LANGS.get(self.audio_lang.get()),
+            use_subtitles=bool(self.use_subs.get()),
+            add_timestamps=bool(self.add_ts.get()),
+        )
+
+        # Recordar preferencias para la próxima vez.
+        settings.save({
+            "summary_language": self.summary_lang.get(),
+            "audio_language": self.audio_lang.get(),
+            "length_level": self.length_level.get(),
+            "template": self.template.get(),
+            "model": self.model.get(),
+            "custom_prompt": custom_prompt,
+        })
 
         self.process_btn.configure(state="disabled", text="Procesando...")
         for btn in (self.open_md_btn, self.open_html_btn, self.open_obsidian_btn, self.open_dir_btn):
             btn.configure(state="disabled")
 
-        thread = threading.Thread(
-            target=self._run,
-            args=(requests, custom_prompt, summary_language, audio_language, length_level),
-            daemon=True,
-        )
+        thread = threading.Thread(target=self._run, args=(requests, opts), daemon=True)
         thread.start()
 
-    def _run(self, requests, custom_prompt, summary_language, audio_language, length_level):
+    def _run(self, requests, opts):
         try:
-            result = process(
-                requests=requests,
-                custom_prompt=custom_prompt,
-                summary_language=summary_language,
-                length_level=length_level,
-                transcribe_language=audio_language,
-                on_progress=self.log,
-            )
+            result = process(requests=requests, on_progress=self.log, **opts)
             self._result = result
             self.log(f"✔ Markdown: {result.md_path}")
             self.log(f"✔ HTML:     {result.html_path}")
@@ -281,6 +311,10 @@ class App(ctk.CTk):
 
     def open_dir(self):
         self._open(config.OUTPUT_DIR)
+
+    def clean_downloads(self):
+        n, mb = maintenance.clean_downloads()
+        self.log(f"🧹 Descargas limpiadas: {n} archivos, {mb:.1f} MB liberados.")
 
 
 def run():

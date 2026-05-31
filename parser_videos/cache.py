@@ -41,10 +41,20 @@ def save_segments(
     title: str,
     url: str,
     segments: list[dict],
+    source: str = "whisper",
 ) -> None:
-    """Guarda la transcripción completa del vídeo en la caché."""
+    """Guarda la transcripción completa del vídeo en la caché.
+
+    `source` indica de dónde salió la transcripción: "whisper" o "subtitles".
+    """
     config.ensure_dirs()
-    data = {"video_id": video_id, "title": title, "url": url, "segments": segments}
+    data = {
+        "video_id": video_id,
+        "title": title,
+        "url": url,
+        "source": source,
+        "segments": segments,
+    }
     _cache_path(video_id, language).write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )

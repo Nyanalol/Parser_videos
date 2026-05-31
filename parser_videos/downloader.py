@@ -10,6 +10,7 @@ descargó antes no se vuelve a descargar (caché de audio).
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,8 +46,36 @@ class DownloadResult:
     info: VideoInfo
 
 
+def is_local_path(s: str) -> bool:
+    """Indica si la entrada es un archivo local existente (no una URL)."""
+    try:
+        return Path(s).expanduser().exists()
+    except OSError:
+        return False
+
+
+def _convert_to_mp3(source_path: Path, audio_path: Path) -> None:
+    """Convierte cualquier archivo de audio/vídeo a MP3 mono 64k con ffmpeg."""
+    ffmpeg = get_ffmpeg_exe()
+    cmd = [
+        ffmpeg, "-y", "-i", str(source_path),
+        "-vn", "-ac", "1", "-b:a", f"{_AUDIO_BITRATE}k",
+        str(audio_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0 or not audio_path.exists():
+        raise RuntimeError(f"Fallo al convertir el audio con ffmpeg:\n{proc.stderr[-500:]}")
+
+
 def probe(url: str) -> VideoInfo:
-    """Obtiene los metadatos del vídeo sin descargar el audio."""
+    """Obtiene los metadatos del vídeo/archivo sin descargar el audio."""
+    if is_local_path(url):
+        p = Path(url).expanduser().resolve()
+        vid = "local_" + hashlib.md5(str(p).encode("utf-8")).hexdigest()[:12]
+        return VideoInfo(
+            video_id=vid, title=p.stem, duration_seconds=None, webpage_url=str(p)
+        )
+
     opts = {"quiet": True, "no_warnings": True, "noplaylist": True, "skip_download": True}
     with YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
@@ -57,6 +86,32 @@ def probe(url: str) -> VideoInfo:
         duration_seconds=info.get("duration"),
         webpage_url=info.get("webpage_url") or url,
     )
+
+
+def expand_playlist(url: str) -> list[str]:
+    """Si la URL es una playlist/canal, devuelve las URLs de sus vídeos.
+
+    Para una URL de un único vídeo (o un archivo local) devuelve [url].
+    """
+    if is_local_path(url):
+        return [url]
+    opts = {"quiet": True, "no_warnings": True, "extract_flat": "in_playlist", "skip_download": True}
+    try:
+        with YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception:
+        return [url]
+    entries = info.get("entries") if isinstance(info, dict) else None
+    if not entries:
+        return [url]
+    urls = []
+    for e in entries:
+        if not e:
+            continue
+        u = e.get("url") or e.get("webpage_url") or e.get("id")
+        if u:
+            urls.append(u)
+    return urls or [url]
 
 
 def download_audio(
@@ -82,6 +137,13 @@ def download_audio(
     audio_path = config.DOWNLOADS_DIR / f"{info.video_id}.mp3"
     if audio_path.exists() and audio_path.stat().st_size > 0:
         _log("Audio ya descargado anteriormente; se reutiliza.")
+        return DownloadResult(audio_path=audio_path, info=info)
+
+    # Archivo local: convertimos directamente, sin descargar nada.
+    if is_local_path(url):
+        _log("Extrayendo audio del archivo local...")
+        _convert_to_mp3(Path(url).expanduser().resolve(), audio_path)
+        _log("Audio listo.")
         return DownloadResult(audio_path=audio_path, info=info)
 
     def _hook(d: dict) -> None:
@@ -122,15 +184,7 @@ def download_audio(
         raise FileNotFoundError("No se encontró el audio descargado por yt-dlp.")
 
     # Convertir a MP3 mono 64 kbps con nuestro ffmpeg.
-    ffmpeg = get_ffmpeg_exe()
-    cmd = [
-        ffmpeg, "-y", "-i", str(source_path),
-        "-vn", "-ac", "1", "-b:a", f"{_AUDIO_BITRATE}k",
-        str(audio_path),
-    ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0 or not audio_path.exists():
-        raise RuntimeError(f"Fallo al convertir el audio con ffmpeg:\n{proc.stderr[-500:]}")
+    _convert_to_mp3(source_path, audio_path)
 
     # Limpiar el archivo fuente original.
     try:
