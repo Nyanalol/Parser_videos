@@ -14,7 +14,7 @@ from typing import Optional
 
 import customtkinter as ctk
 
-from . import cache, config, maintenance, settings, summarizer
+from . import cache, config, maintenance, qa, settings, summarizer
 from .pipeline import VideoRequest, process
 
 ctk.set_appearance_mode("System")
@@ -117,6 +117,10 @@ class App(ctk.CTk):
             botones_top, text="📚 Historial", fg_color="gray30",
             hover_color="gray25", command=self.open_history,
         ).pack(side="left", padx=8)
+        ctk.CTkButton(
+            botones_top, text="💬 Preguntar al vídeo", fg_color="gray30",
+            hover_color="gray25", command=self.open_qa,
+        ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             botones_top, text="🧹 Limpiar descargas", fg_color="gray30",
             hover_color="gray25", command=self.clean_downloads,
@@ -319,6 +323,70 @@ class App(ctk.CTk):
     def clean_downloads(self):
         n, mb = maintenance.clean_downloads()
         self.log(f"🧹 Descargas limpiadas: {n} archivos, {mb:.1f} MB liberados.")
+
+    # ----- Chat / Q&A sobre el vídeo -----
+    def open_qa(self):
+        """Ventana para preguntar sobre un vídeo ya transcrito (de la caché)."""
+        items = cache.list_cached()
+        if not items:
+            self.log("⚠ Aún no hay vídeos en caché. Procesa uno antes de preguntar.")
+            return
+
+        win = ctk.CTkToplevel(self)
+        win.title("Preguntar al vídeo")
+        win.geometry("760x560")
+        win.transient(self)
+
+        opciones = {it["title"]: it["path"] for it in items}
+        seleccion = ctk.CTkOptionMenu(win, values=list(opciones.keys()))
+        seleccion.set(next(iter(opciones)))
+        seleccion.pack(fill="x", padx=12, pady=(12, 6))
+
+        chat = ctk.CTkTextbox(win)
+        chat.pack(fill="both", expand=True, padx=12, pady=6)
+        chat.configure(state="disabled")
+
+        fila = ctk.CTkFrame(win, fg_color="transparent")
+        fila.pack(fill="x", padx=12, pady=(0, 12))
+        fila.grid_columnconfigure(0, weight=1)
+        entrada = ctk.CTkEntry(fila, placeholder_text="Escribe tu pregunta y pulsa Enviar...")
+        entrada.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        boton = ctk.CTkButton(fila, text="Enviar", width=90)
+        boton.grid(row=0, column=1)
+
+        historial: list[dict] = []
+
+        def _append(quien: str, texto: str):
+            chat.configure(state="normal")
+            chat.insert("end", f"{quien}: {texto}\n\n")
+            chat.see("end")
+            chat.configure(state="disabled")
+
+        def _ask():
+            pregunta = entrada.get().strip()
+            if not pregunta:
+                return
+            entrada.delete(0, "end")
+            _append("Tú", pregunta)
+            boton.configure(state="disabled", text="...")
+
+            def _work():
+                try:
+                    data = cache.load_file(opciones[seleccion.get()]) or {}
+                    segs = data.get("segments", [])
+                    resp = qa.answer(pregunta, segs, history=list(historial), model=self.model.get())
+                    historial.append({"role": "user", "content": pregunta})
+                    historial.append({"role": "assistant", "content": resp})
+                    win.after(0, lambda: _append("Vídeo", resp))
+                except Exception as exc:
+                    win.after(0, lambda: _append("Error", str(exc)))
+                finally:
+                    win.after(0, lambda: boton.configure(state="normal", text="Enviar"))
+
+            threading.Thread(target=_work, daemon=True).start()
+
+        boton.configure(command=_ask)
+        entrada.bind("<Return>", lambda e: _ask())
 
     # ----- Historial / biblioteca -----
     def open_history(self):

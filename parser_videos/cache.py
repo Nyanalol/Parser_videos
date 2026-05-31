@@ -60,6 +60,14 @@ def save_segments(
     )
 
 
+def load_file(path: str) -> Optional[dict]:
+    """Carga un archivo de caché por su ruta (devuelve el dict o None)."""
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
 def list_cached() -> list[dict]:
     """Lista las transcripciones cacheadas (para el historial de la app).
 
