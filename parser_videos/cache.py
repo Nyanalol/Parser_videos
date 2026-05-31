@@ -25,7 +25,7 @@ def _cache_path(video_id: str, language: Optional[str]) -> Path:
 
 
 def load_segments(video_id: str, language: Optional[str]) -> Optional[dict]:
-    """Devuelve los datos cacheados {title, url, segments} o None si no hay."""
+    """Devuelve los datos cacheados {title, url, source, segments} o None."""
     path = _cache_path(video_id, language)
     if not path.exists():
         return None
@@ -58,3 +58,28 @@ def save_segments(
     _cache_path(video_id, language).write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+
+def list_cached() -> list[dict]:
+    """Lista las transcripciones cacheadas (para el historial de la app).
+
+    Devuelve dicts con title, url, source y la ruta del archivo de caché,
+    ordenados por fecha de modificación (más recientes primero).
+    """
+    if not config.CACHE_DIR.exists():
+        return []
+    items: list[dict] = []
+    for p in config.CACHE_DIR.glob("*.json"):
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        items.append({
+            "title": data.get("title", p.stem),
+            "url": data.get("url", ""),
+            "source": data.get("source", "whisper"),
+            "mtime": p.stat().st_mtime,
+            "path": str(p),
+        })
+    items.sort(key=lambda x: x["mtime"], reverse=True)
+    return items
